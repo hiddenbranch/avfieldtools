@@ -2,9 +2,11 @@
 (function () {
   'use strict';
   const C = window.AVCore;
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.1.1';
   const PRO_REQUIRED = false;                 // flip to true once the Lemon Squeezy product exists
-  const LS_VALIDATE_URL = 'https://api.lemonsqueezy.com/v1/licenses/validate';
+  // Licence keys are signed offline and checked on the device. No payment provider, no server, no network call.
+  const PUBLIC_KEY = {"kty":"EC","crv":"P-256","x":"REPLACE_WITH_YOUR_PUBLIC_KEY_X","y":"REPLACE_WITH_YOUR_PUBLIC_KEY_Y"};
+  const PRODUCT = 'avft';
   const CDN = {
     tesseract: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js',
     jsqr: 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js',
@@ -482,14 +484,16 @@
       h('label', { class: 'field' }, h('span', null, 'License key from your purchase email'), key),
       h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async () => {
         const k = key.value.trim(); if (!k) return toast('Paste the key first');
-        try { const r = await fetch(LS_VALIDATE_URL, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'license_key=' + encodeURIComponent(k) }); const j = await r.json();
-          if (j.valid) { await S.set('pro', true); await S.set('licenseKey', k); toast('License active'); go('settings'); } else toast(j.error || 'That key is not valid'); }
-        catch (e) { toast('Could not reach the license server. Try again with a connection.'); } } }, 'Activate')),
+        const r = await window.License.verify(k, PUBLIC_KEY, PRODUCT);
+        if (r.valid) { await S.set('pro', true); await S.set('licenseKey', k); toast('Licence active'); go('settings'); } else toast(r.reason); } }, 'Activate')),
       h('h3', null, 'Install on your phone'),
       h('p', { class: 'muted small' }, 'iPhone: open this page in Safari, tap Share, then Add to Home Screen. Android: use the Install button at the top, or the browser menu, Add to Home screen. Once installed it works without a connection, except the label reader on first use.'),
       h('h3', null, 'Your data'),
       h('p', { class: 'muted small' }, 'Jobs, devices, punch items and photos live in this browser on this phone. Nothing is uploaded anywhere until you share it. Clearing the browser site data removes everything, so send a package before you do.'),
       h('div', { class: 'btns' }, h('button', { class: 'btn danger', onclick: async () => { if (confirm('Delete every job, device, punch item and photo on this phone?')) { await DB.clearAll(); S.cache = {}; state.jobId = null; toast('Cleared'); go('calc'); } } }, 'Delete all data')),
+      h('h3', null, 'Updates'),
+      h('p', { class: 'muted small' }, `This page is AV Field Tools ${APP_VERSION}. If the number does not match what was uploaded, use the button.`),
+      h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async () => { toast('Fetching the latest files'); try { const keys = await caches.keys(); for (const k of keys) await caches.delete(k); if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); for (const r of regs) await r.unregister(); } for (const u of ['./', './index.html', './app.js', './core.js', './license.js', './sw.js']) { try { await fetch(u, { cache: 'reload' }); } catch (e) { /* offline */ } } } catch (e) { /* fall through */ } location.replace(location.pathname + '?r=' + Date.now()); } }, 'Check for updates and reload')),
       h('p', { class: 'muted small' }, `AV Field Tools ${APP_VERSION}`));
   }
 
