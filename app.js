@@ -183,7 +183,9 @@
   const calcValues = {};
   async function renderCalc() {
     if (!state.sub) {
-      view.append(h('h2', null, 'Calculators'), h('ul', { class: 'list' }, CALCS.map(c => h('li', null, h('button', { onclick: () => go('calc', c.id) }, h('span', { class: 't' }, h('b', null, c.title), h('span', null, c.sub)), h('span', { class: 'k' }, '\u203A'))))));
+      view.append(h('h2', null, 'Calculators'), h('ul', { class: 'list' },
+        h('li', null, h('a', { href: 'sightline.html' }, h('span', { class: 't' }, h('b', null, 'Sightline'), h('span', null, 'Camera field of view and projected image, held up in the room')), h('span', { class: 'k' }, '\u203A'))),
+        CALCS.map(c => h('li', null, h('button', { onclick: () => go('calc', c.id) }, h('span', { class: 't' }, h('b', null, c.title), h('span', null, c.sub)), h('span', { class: 'k' }, '\u203A'))))));
       return;
     }
     const c = CALCS.find(x => x.id === state.sub); if (!c) return go('calc');
