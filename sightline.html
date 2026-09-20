@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#101418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Sightline</title>
+<style>
+:root{--ink:#e9ecef;--dim:#9aa3ad;--panel:rgba(14,18,22,.82);--line:rgba(255,255,255,.14);--accent:#ff7a1a;--accent2:#ffd08a;--ok:#4fd18b;--warn:#ffb020}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#0e1216;color:var(--ink);font:15px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overscroll-behavior:none;overflow:hidden}
+#view{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#cam{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none}
+#top{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 8px) 10px 8px;display:flex;gap:8px;align-items:center;background:linear-gradient(rgba(10,13,16,.9),rgba(10,13,16,0))}
+.tabs{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;flex:1}
+.tabs button{flex:1;border:0;background:transparent;color:var(--dim);font:inherit;font-weight:600;padding:8px 4px;border-radius:8px}
+.tabs button[aria-selected=true]{background:var(--accent);color:#1a0d00}
+select,input[type=number],input[type=text]{font:inherit;color:var(--ink);background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:38px;max-width:100%}
+select{appearance:none;-webkit-appearance:none;padding-right:26px;background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+input[type=range]{width:100%;accent-color:var(--accent)}
+#hud{position:fixed;left:10px;top:calc(env(safe-area-inset-top) + 62px);display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.pill{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:13px;color:var(--ink);white-space:nowrap}
+.pill b{font-weight:600;color:var(--accent2)}
+.pill.warn{color:var(--warn)}
+#bottom{position:fixed;left:0;right:0;bottom:0;padding:8px 10px calc(env(safe-area-inset-bottom) + 10px);background:linear-gradient(rgba(10,13,16,0),rgba(10,13,16,.92) 30%)}
+#sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;display:none;gap:10px;flex-direction:column;max-height:44vh;overflow:auto}
+#sheet.open{display:flex}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row label{color:var(--dim);font-size:13px;min-width:70px}
+.row .grow{flex:1;min-width:120px}
+.row input[type=number]{width:84px}
+.row .val{min-width:54px;text-align:right;color:var(--accent2);font-variant-numeric:tabular-nums}
+.hint{color:var(--dim);font-size:12.5px}
+#actions{display:flex;gap:8px;margin-top:8px}
+#actions button,.btn{flex:1;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-weight:600;padding:12px 8px;border-radius:12px;min-height:46px}
+#actions button.primary,.btn.primary{background:var(--accent);color:#1a0d00;border-color:transparent}
+#actions button[aria-pressed=true]{background:rgba(255,122,26,.25);border-color:var(--accent);color:var(--accent2)}
+#actions button:disabled{opacity:.4}
+#gate{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;padding:32px;text-align:center;background:#0e1216;z-index:10}
+#gate h1{font-size:30px;margin:0;letter-spacing:-.01em}
+#gate p{color:var(--dim);max-width:34ch;margin:0}
+#gate .btn{flex:0;min-width:220px;padding:14px 18px}
+#modal{position:fixed;inset:0;display:none;z-index:9;pointer-events:none}
+#modal.open{display:block}
+#modal .card{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 10px);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px;pointer-events:auto;backdrop-filter:blur(8px)}
+#modal h2{font-size:16px;margin:0}
+#modal .actions{display:flex;gap:8px}
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 110px);transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:14px;display:none;z-index:11;max-width:90vw;text-align:center}
+#rotate{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#0e1216;color:var(--dim);z-index:12;padding:30px;text-align:center}
+@media (orientation:landscape) and (max-height:520px){#rotate{display:flex}}
+@media (prefers-reduced-motion:no-preference){#sheet{transition:max-height .2s}}
+</style>
+</head>
+<body>
+<video id="cam" playsinline muted autoplay></video>
+<canvas id="view"></canvas>
+
+<div id="top">
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-mode="camera">Camera</button>
+    <button role="tab" aria-selected="false" data-mode="projector">Projector</button>
+    <button role="tab" aria-selected="false" data-mode="display">Display</button>
+  </div>
+  <select id="camSel" title="Phone lens" style="max-width:38vw"></select>
+</div>
+
+<div id="hud">
+  <div class="pill" id="pillInfo">…</div>
+  <div class="pill" id="pillLevel">pitch — · roll —</div>
+  <div class="pill" id="pillCal">lens not calibrated</div>
+</div>
+
+<div id="bottom">
+  <div id="sheet"></div>
+  <div id="actions">
+    <button id="btnSheet">Settings</button>
+    <button id="btnCal">Calibrate</button>
+    <button id="btnPin" aria-pressed="false">Pin to room</button>
+    <button id="btnShot" class="primary">Capture</button>
+  </div>
+</div>
+
+<div id="modal"><div class="card" id="modalCard"></div></div>
+<div id="toast"></div>
+<div id="rotate">Hold the phone upright (portrait) for Sightline.</div>
+
+<div id="gate">
+  <h1>Sightline</h1>
+  <p>Hold the phone where the camera, projector or display would go and see what it sees, or what it would put on the wall.</p>
+  <button class="btn primary" id="btnStart">Start camera</button>
+  <p class="hint">Needs the rear camera and, for pin-to-room, motion access. Nothing leaves the phone.</p>
+</div>
+
+<script>
+// ---- math ----
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+function matMul(A, B) { const C = [[0,0,0],[0,0,0],[0,0,0]]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] = A[i][0]*B[0][j] + A[i][1]*B[1][j] + A[i][2]*B[2][j]; return C; }
+function matT(A) { return [[A[0][0],A[1][0],A[2][0]],[A[0][1],A[1][1],A[2][1]],[A[0][2],A[1][2],A[2][2]]]; }
+function apply(A, v) { return [A[0][0]*v[0]+A[0][1]*v[1]+A[0][2]*v[2], A[1][0]*v[0]+A[1][1]*v[1]+A[1][2]*v[2], A[2][0]*v[0]+A[2][1]*v[1]+A[2][2]*v[2]]; }
+const I3 = () => [[1,0,0],[0,1,0],[0,0,1]];
+function rotX(d) { const c = Math.cos(d*D2R), s = Math.sin(d*D2R); return [[1,0,0],[0,c,-s],[0,s,c]]; }
+function rotY(d) { const c = Math.cos(d*D2R), s = Math.sin(d*D2R); return [[c,0,s],[0,1,0],[-s,0,c]]; }
+function rotZ(d) { const c = Math.cos(d*D2R), s = Math.sin(d*D2R); return [[c,-s,0],[s,c,0],[0,0,1]]; }
+// W3C DeviceOrientation: R = Rz(alpha)·Rx(beta)·Ry(gamma) maps device frame to world frame (x east, y north, z up)
+function rotZXY(a, b, g) { return matMul(rotZ(a), matMul(rotX(b), rotY(g))); }
+// camera looks along device -z, image right = +x, image up = +y
+function pitchRoll(R) { const up = R[2]; /* world up in device coords */ return { pitch: Math.asin(Math.max(-1, Math.min(1, -up[2]))) * R2D, roll: Math.atan2(-up[0], up[1]) * R2D }; }
+// extents in tan space on the plane z = -1: l, r, t, b (l < r, b < t)
+function frustumPoints(e, n = 16) {
+  const pts = []; const lerp = (a, b, k) => a + (b - a) * k;
+  for (let i = 0; i < n; i++) pts.push([lerp(e.l, e.r, i / n), e.t, -1]);          // top edge, left to right
+  for (let i = 0; i < n; i++) pts.push([e.r, lerp(e.t, e.b, i / n), -1]);          // right edge, top to bottom
+  for (let i = 0; i < n; i++) pts.push([lerp(e.r, e.l, i / n), e.b, -1]);          // bottom edge, right to left
+  for (let i = 0; i < n; i++) pts.push([e.l, lerp(e.b, e.t, i / n), -1]);          // left edge, bottom to top
+  return pts;
+}
+function project(p, f, cx, cy) { if (p[2] > -0.02) return null; return [cx + p[0] / -p[2] * f, cy - p[1] / -p[2] * f]; }
+function hfovToTan(hfovDeg) { return Math.tan(hfovDeg / 2 * D2R); }
+function tanToFov(t) { return 2 * Math.atan(t) * R2D; }
+// ---- end math ----
+
+// ---- data (starter values from spec sheets; verify against the current sheet before relying on one) ----
+const CAMERAS = [
+  { name: "Custom", hfov: 90, aspect: 16/9, zoom: 1 },
+  { name: "Logitech Rally Bar / Rally Camera", hfov: 82.1, aspect: 16/9, zoom: 5 },
+  { name: "Logitech Rally Bar Mini", hfov: 112.8, aspect: 16/9, zoom: 1, note: "120° diagonal" },
+  { name: "Logitech MeetUp", hfov: 112.8, aspect: 16/9, zoom: 1, note: "120° diagonal" },
+  { name: "Poly Studio X50 / X52 / USB", hfov: 120, aspect: 16/9, zoom: 1 },
+  { name: "Cisco Room Kit / Quad Camera / EQ", hfov: 83, aspect: 16/9, zoom: 5 },
+  { name: "Cisco Room Bar", hfov: 112, aspect: 16/9, zoom: 1 },
+  { name: "Cisco Room Kit Mini", hfov: 120, aspect: 16/9, zoom: 1 },
+  { name: "Q-SYS NC-110", hfov: 110, aspect: 16/9, zoom: 1 },
+  { name: "Q-SYS NC-12x80", hfov: 80, aspect: 16/9, zoom: 12 },
+  { name: "Q-SYS NC-20x60", hfov: 60, aspect: 16/9, zoom: 20 },
+  { name: "Yealink UVC84", hfov: 80, aspect: 16/9, zoom: 12 },
+  { name: "Huddly L1", hfov: 112.8, aspect: 16/9, zoom: 1, note: "120° diagonal" },
+  { name: "Neat Bar", hfov: 112.8, aspect: 16/9, zoom: 1, note: "120° diagonal" },
+  { name: "PTZOptics Move 4K 12X", hfov: 72.5, aspect: 16/9, zoom: 12 },
+  { name: "PTZOptics Move 4K 20X / 30X", hfov: 60.7, aspect: 16/9, zoom: 20 },
+  { name: "Vaddio RoboSHOT 12E", hfov: 70.2, aspect: 16/9, zoom: 12 },
+];
+const PROJECTORS = [
+  { name: "Custom", tr1: 1.5, tr2: 1.5, aspect: 16/10 },
+  { name: "Standard throw, zoom lens (1.4 to 2.3)", tr1: 1.4, tr2: 2.3, aspect: 16/10 },
+  { name: "Standard throw, fixed (1.5)", tr1: 1.5, tr2: 1.5, aspect: 16/10 },
+  { name: "Short throw (0.55)", tr1: 0.55, tr2: 0.55, aspect: 16/10 },
+  { name: "Long throw, zoom lens (2.5 to 4.0)", tr1: 2.5, tr2: 4.0, aspect: 16/10 },
+];
+const ASPECTS = [["16:9", 16/9], ["16:10", 16/10], ["4:3", 4/3], ["21:9", 21/9]];
+const DISPLAYS = [55, 65, 75, 85, 98, 110];
+const UNITS = { in: 1, ft: 12, cm: 1/2.54, m: 100/2.54 };
+
+// ---- state ----
+const S = {
+  mode: "camera",
+  cam: { i: 1, hfov: 82.1, aspect: 16/9, zoomMax: 5, zoom: 1 },
+  proj: { i: 1, tr1: 1.4, tr2: 2.3, tr: 1.6, aspect: 16/10, offset: 0, inverted: false, dist: 0 },
+  disp: { diag: 85, aspect: 16/9, dist: 0, customW: 0, customH: 0 },
+  unit: "ft",
+  nudge: I3(),           // target frame rotation relative to the phone (drag to nudge)
+  pinned: null,          // target frame in world coordinates while pinned to the room
+  R: null,               // latest device→world rotation, null until motion data arrives
+  motion: false,
+  calib: {},             // lensKey -> { fl: focal length as a fraction of the stream's long side }
+  lensKey: "", vw: 0, vh: 0,
+  frozen: null,          // ImageBitmap/canvas of a frozen frame during tap flows
+  tapFlow: null,         // { kind: 'calib'|'dist', pts: [] }
+};
+try { Object.assign(S.calib, JSON.parse(localStorage.getItem("sightline.calib") || "{}")); } catch (e) {}
+try { const saved = JSON.parse(localStorage.getItem("sightline.settings") || "null"); if (saved) { S.mode = saved.mode || S.mode; Object.assign(S.cam, saved.cam || {}); Object.assign(S.proj, saved.proj || {}); Object.assign(S.disp, saved.disp || {}); S.unit = saved.unit || S.unit; } } catch (e) {}
+function persist() { try { localStorage.setItem("sightline.calib", JSON.stringify(S.calib)); localStorage.setItem("sightline.settings", JSON.stringify({ mode: S.mode, cam: S.cam, proj: S.proj, disp: S.disp, unit: S.unit })); } catch (e) {} }
+
+// ---- dom ----
+const $ = id => document.getElementById(id);
+const video = $("cam"), canvas = $("view"), ctx = canvas.getContext("2d");
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+let CW = 0, CH = 0;
+function resize() { CW = Math.round(innerWidth * DPR); CH = Math.round(innerHeight * DPR); canvas.width = CW; canvas.height = CH; }
+addEventListener("resize", resize); resize();
+function toast(msg, ms = 2200) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", ms); }
+
+// ---- camera ----
+let stream = null;
+async function startCamera(deviceId) {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  const video_c = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" } };
+  Object.assign(video_c, { width: { ideal: 1920 }, height: { ideal: 1080 } });
+  stream = await navigator.mediaDevices.getUserMedia({ video: video_c, audio: false });
+  video.srcObject = stream; await video.play().catch(() => {});
+  const track = stream.getVideoTracks()[0]; const label = track.label || "camera";
+  await listCameras(track.getSettings().deviceId);
+  S.lensKey = label;
+  video.addEventListener("loadedmetadata", () => { S.vw = video.videoWidth; S.vh = video.videoHeight; }, { once: true });
+  S.vw = video.videoWidth; S.vh = video.videoHeight;
+  updateCalPill();
+}
+async function listCameras(currentId) {
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+  const sel = $("camSel"); sel.innerHTML = "";
+  devs.forEach(d => { const o = document.createElement("option"); o.value = d.deviceId; o.textContent = (d.label || "camera").replace(/ Camera$/i, ""); if (d.deviceId === currentId) o.selected = true; sel.appendChild(o); });
+  sel.style.display = devs.length > 1 ? "" : "none";
+}
+$("camSel").addEventListener("change", e => startCamera(e.target.value).catch(err => toast("Could not switch lens: " + err.message)));
+
+// focal length in canvas pixels for the current lens and the cover-fit drawing scale
+function drawScale() { if (!S.vw) return 1; return Math.max(CW / S.vw, CH / S.vh); }
+function focalPx() {
+  const long = Math.max(S.vw, S.vh) || 1920; const c = S.calib[S.lensKey];
+  let fl;
+  if (c) fl = c.fl;
+  else { const guess = /ultra/i.test(S.lensKey) ? 108 : /tele/i.test(S.lensKey) ? 37 : 69; fl = 0.5 / hfovToTan(guess); }
+  return fl * long * drawScale();
+}
+function updateCalPill() {
+  const c = S.calib[S.lensKey]; const p = $("pillCal");
+  if (!S.vw) { p.textContent = "starting camera…"; return; }
+  const f = focalPx(); const h = tanToFov(CW / 2 / f), v = tanToFov(CH / 2 / f);
+  if (c) { p.className = "pill"; p.textContent = `lens calibrated: phone sees ${h.toFixed(0)}° × ${v.toFixed(0)}°`; }
+  else { p.className = "pill warn"; p.textContent = `lens not calibrated, assuming ${h.toFixed(0)}° × ${v.toFixed(0)}°`; }
+}
+
+// ---- motion ----
+function onOrient(e) {
+  if (e.alpha == null || e.beta == null || e.gamma == null) return;
+  S.R = rotZXY(e.alpha, e.beta, e.gamma); S.motion = true;
+}
+async function enableMotion() {
+  try {
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      const r = await DeviceOrientationEvent.requestPermission(); if (r !== "granted") return false;
+    }
+    addEventListener("deviceorientation", onOrient); return true;
+  } catch (e) { return false; }
+}
+
+// ---- target extents (tan space) ----
+function extents() {
+  if (S.mode === "camera") {
+    const th = hfovToTan(S.cam.hfov) / S.cam.zoom, tv = th / S.cam.aspect;
+    const wide = S.cam.zoom > 1.001 ? { l: -hfovToTan(S.cam.hfov), r: hfovToTan(S.cam.hfov), t: hfovToTan(S.cam.hfov) / S.cam.aspect, b: -hfovToTan(S.cam.hfov) / S.cam.aspect } : null;
+    return { main: { l: -th, r: th, t: tv, b: -tv }, ghost: wide };
+  }
+  if (S.mode === "projector") {
+    const P = S.proj; const rect = tr => {
+      const hw = 1 / (2 * tr), H = 1 / (tr * P.aspect); let b = (P.offset / 100) * H, t = b + H;
+      if (P.inverted) { const nb = -t, nt = -b; b = nb; t = nt; }
+      return { l: -hw, r: hw, t, b };
+    };
+    const main = rect(P.tr); let ghost = null;
+    if (Math.abs(P.tr2 - P.tr1) > 0.001) ghost = rect(P.tr === P.tr1 ? P.tr2 : P.tr1);
+    return { main, ghost };
+  }
+  const D = S.disp; let W, H;
+  if (D.customW > 0 && D.customH > 0) { W = D.customW; H = D.customH; } else { W = D.diag * D.aspect / Math.sqrt(D.aspect * D.aspect + 1); H = W / D.aspect; }
+  const d = D.dist > 0 ? D.dist : 120; // no distance yet: draw at 10 ft so there is something to nudge
+  return { main: { l: -W / (2 * d), r: W / (2 * d), t: H / (2 * d), b: -H / (2 * d) }, ghost: null, noDist: !(D.dist > 0) };
+}
+function targetToDevice() {
+  if (S.pinned && S.R) return matMul(matT(S.R), S.pinned);
+  return S.nudge;
+}
+
+// ---- render ----
+function drawFrame() {
+  if (video.videoWidth && (video.videoWidth !== S.vw || video.videoHeight !== S.vh)) { S.vw = video.videoWidth; S.vh = video.videoHeight; }
+  if (S.frozen) ctx.drawImage(S.frozen, 0, 0, CW, CH);
+  else if (video.readyState >= 2 && S.vw) {
+    const s = drawScale(), w = S.vw * s, h = S.vh * s; ctx.drawImage(video, (CW - w) / 2, (CH - h) / 2, w, h);
+  } else { ctx.fillStyle = "#0e1216"; ctx.fillRect(0, 0, CW, CH); }
+  if (S.tapFlow) { drawTaps(); return; }
+  const f = focalPx(), cx = CW / 2, cy = CH / 2, M = targetToDevice(), ex = extents();
+  const poly = e => frustumPoints(e).map(p => project(apply(M, p), f, cx, cy)).filter(Boolean);
+  const main = poly(ex.main);
+  // darken everything outside the main frame
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, CW, CH);
+  if (main.length >= 3) { ctx.moveTo(main[0][0], main[0][1]); for (const p of main.slice(1)) ctx.lineTo(p[0], p[1]); ctx.closePath(); }
+  ctx.fillStyle = "rgba(6,8,10,0.55)"; ctx.fill("evenodd"); ctx.restore();
+  if (ex.ghost) { const g = poly(ex.ghost); if (g.length >= 3) { ctx.save(); ctx.setLineDash([10 * DPR, 8 * DPR]); ctx.lineWidth = 1.5 * DPR; ctx.strokeStyle = "rgba(255,208,138,0.7)"; ctx.beginPath(); ctx.moveTo(g[0][0], g[0][1]); for (const p of g.slice(1)) ctx.lineTo(p[0], p[1]); ctx.closePath(); ctx.stroke(); ctx.restore(); } }
+  if (main.length >= 3) {
+    ctx.lineWidth = 3 * DPR; ctx.strokeStyle = "#ff7a1a"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(main[0][0], main[0][1]); for (const p of main.slice(1)) ctx.lineTo(p[0], p[1]); ctx.closePath(); ctx.stroke();
+    // where the frame runs off the screen, show a chevron and how far past the edge it goes
+    const xs = main.map(p => p[0]), ys = main.map(p => p[1]);
+    const over = [["left", Math.min(...xs) < 0, cx - Math.min(...xs)], ["right", Math.max(...xs) > CW, Math.max(...xs) - cx], ["top", Math.min(...ys) < 0, cy - Math.min(...ys)], ["bottom", Math.max(...ys) > CH, Math.max(...ys) - cy]];
+    ctx.fillStyle = "#ffd08a"; ctx.strokeStyle = "#ffd08a"; ctx.lineWidth = 3 * DPR; ctx.font = `${13 * DPR}px -apple-system,Roboto,sans-serif`; ctx.textAlign = "center";
+    for (const [side, hit, reach] of over) {
+      if (!hit) continue;
+      const screenHalf = side === "left" || side === "right" ? CW / 2 : CH / 2;
+      const extra = tanToFov(reach / f) / 2 - tanToFov(screenHalf / f) / 2;   // degrees beyond the screen edge
+      const m = 22 * DPR, a = 10 * DPR; ctx.beginPath();
+      if (side === "left") { ctx.moveTo(m + a, cy - a); ctx.lineTo(m, cy); ctx.lineTo(m + a, cy + a); ctx.stroke(); ctx.save(); ctx.translate(m + a + 6 * DPR, cy); ctx.rotate(-Math.PI / 2); ctx.fillText(`+${extra.toFixed(0)}°`, 0, 0); ctx.restore(); }
+      if (side === "right") { ctx.moveTo(CW - m - a, cy - a); ctx.lineTo(CW - m, cy); ctx.lineTo(CW - m - a, cy + a); ctx.stroke(); ctx.save(); ctx.translate(CW - m - a - 6 * DPR, cy); ctx.rotate(Math.PI / 2); ctx.fillText(`+${extra.toFixed(0)}°`, 0, 0); ctx.restore(); }
+      if (side === "top") { const y = CH * 0.16; ctx.moveTo(cx - a, y + a); ctx.lineTo(cx, y); ctx.lineTo(cx + a, y + a); ctx.stroke(); ctx.fillText(`+${extra.toFixed(0)}°`, cx, y + a + 16 * DPR); }
+      if (side === "bottom") { const y = CH * 0.7; ctx.moveTo(cx - a, y - a); ctx.lineTo(cx, y); ctx.lineTo(cx + a, y - a); ctx.stroke(); ctx.fillText(`+${extra.toFixed(0)}°`, cx, y - a - 8 * DPR); }
+    }
+    if (over.every(o => o[1])) ctx.fillText("Frame is bigger than the phone's view on every side: pin to room and pan, or switch to the wide lens", cx, CH * 0.24);
+  } else {
+    ctx.fillStyle = "#ffd08a"; ctx.font = `${15 * DPR}px -apple-system,Roboto,sans-serif`; ctx.textAlign = "center";
+    ctx.fillText(S.pinned ? "Frame is out of view. Pan the phone." : "Frame is wider than this lens. Pin to room and pan, or switch lens.", cx, cy);
+  }
+  // lens axis crosshair
+  const ax = project(apply(M, [0, 0, -1]), f, cx, cy);
+  if (ax) { ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.5 * DPR; ctx.beginPath(); ctx.moveTo(ax[0] - 12 * DPR, ax[1]); ctx.lineTo(ax[0] + 12 * DPR, ax[1]); ctx.moveTo(ax[0], ax[1] - 12 * DPR); ctx.lineTo(ax[0], ax[1] + 12 * DPR); ctx.stroke(); }
+  // level bubble along the bottom of the frame area
+  if (S.R) { const pr = pitchRoll(S.R); drawLevel(pr.roll); $("pillLevel").textContent = `pitch ${pr.pitch >= 0 ? "+" : ""}${pr.pitch.toFixed(0)}°  ·  roll ${pr.roll >= 0 ? "+" : ""}${pr.roll.toFixed(0)}°`; }
+  else $("pillLevel").textContent = "pitch — · roll — (motion off)";
+  if (ex.noDist) { ctx.fillStyle = "#ffd08a"; ctx.font = `${13 * DPR}px -apple-system,Roboto,sans-serif`; ctx.textAlign = "center"; ctx.fillText("Set a distance to size the display", cx, CH * 0.28); }
+}
+function drawLevel(roll) {
+  const y = CH * 0.62, x = CW / 2, w = CW * 0.3; ctx.save(); ctx.translate(x, y); ctx.rotate(-roll * D2R);
+  ctx.strokeStyle = Math.abs(roll) < 1 ? "#4fd18b" : "rgba(255,255,255,0.5)"; ctx.lineWidth = 2 * DPR; ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); ctx.restore();
+}
+function drawTaps() {
+  const T = S.tapFlow; ctx.fillStyle = "rgba(6,8,10,0.25)"; ctx.fillRect(0, 0, CW, CH);
+  ctx.strokeStyle = "#ff7a1a"; ctx.lineWidth = 3 * DPR; ctx.fillStyle = "#ff7a1a";
+  T.pts.forEach((p, i) => { ctx.beginPath(); ctx.arc(p[0], p[1], 9 * DPR, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(p[0], p[1], 3 * DPR, 0, Math.PI * 2); ctx.fill(); });
+  if (T.pts.length === 2) { ctx.beginPath(); ctx.moveTo(T.pts[0][0], T.pts[0][1]); ctx.lineTo(T.pts[1][0], T.pts[1][1]); ctx.stroke(); }
+  ctx.fillStyle = "#ffd08a"; ctx.font = `${15 * DPR}px -apple-system,Roboto,sans-serif`; ctx.textAlign = "center";
+  ctx.fillText(T.pts.length < 2 ? `Tap ${T.pts.length === 0 ? "the left" : "the right"} end of the known width` : "Enter its width and distance below", CW / 2, CH * 0.18);
+}
+function loop() { drawFrame(); requestAnimationFrame(loop); }
+
+// ---- interaction on the canvas: taps for flows, drag to nudge ----
+let drag = null;
+canvas.addEventListener("pointerdown", e => {
+  const x = e.clientX * DPR, y = e.clientY * DPR;
+  if (S.tapFlow) { if (S.tapFlow.pts.length < 2) { S.tapFlow.pts.push([x, y]); if (S.tapFlow.pts.length === 2) openFlowForm(); } return; }
+  drag = { x, y }; canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", e => {
+  if (!drag) return; const x = e.clientX * DPR, y = e.clientY * DPR, f = focalPx();
+  const dyaw = -Math.atan((x - drag.x) / f) * R2D, dpitch = Math.atan(-(y - drag.y) / f) * R2D; drag = { x, y };
+  const dR = matMul(rotY(dyaw), rotX(dpitch));
+  if (S.pinned) S.pinned = matMul(S.pinned, dR); else S.nudge = matMul(S.nudge, dR);
+});
+canvas.addEventListener("pointerup", () => drag = null); canvas.addEventListener("pointercancel", () => drag = null);
+canvas.addEventListener("dblclick", () => { S.nudge = I3(); if (S.pinned && S.R) S.pinned = S.R; toast("Frame re-centred"); });
+
+// ---- tap flows: calibrate the lens, or measure a distance ----
+function freeze() { const c = document.createElement("canvas"); c.width = CW; c.height = CH; const s = drawScale(), w = S.vw * s, h = S.vh * s; c.getContext("2d").drawImage(video, (CW - w) / 2, (CH - h) / 2, w, h); S.frozen = c; }
+function startFlow(kind) {
+  if (!S.vw) return toast("Camera not ready yet");
+  freeze(); S.tapFlow = { kind, pts: [] }; $("sheet").classList.remove("open"); $("modal").classList.remove("open");
+  toast(kind === "calib" ? "Frame something of known width square-on (a 24 in ceiling tile works). Tap its two ends." : "Tap the two ends of something of known width on the wall (ceiling tile, door, screen).", 4000);
+}
+function endFlow() { S.tapFlow = null; S.frozen = null; $("modal").classList.remove("open"); }
+function openFlowForm() {
+  const T = S.tapFlow; const isCal = T.kind === "calib"; const M = $("modalCard"); const u = S.unit;
+  M.innerHTML = `<h2>${isCal ? "Calibrate this lens" : "Measure distance"}</h2>
+    <div class="row"><label>Width</label><input type="number" id="fw" inputmode="decimal" step="any" placeholder="${u === "ft" ? "2" : "24"}"><select id="fu">${Object.keys(UNITS).map(k => `<option ${k === u ? "selected" : ""}>${k}</option>`).join("")}</select></div>
+    ${isCal ? `<div class="row"><label>Distance</label><input type="number" id="fd" inputmode="decimal" step="any" placeholder="${u === "ft" ? "10" : "120"}"><span class="hint">lens to the wall, measured</span></div>` : ""}
+    <div class="hint">${isCal ? "Best on a wall square to the phone, with the width roughly level. Stored on this phone for this lens." : "Assumes the wall is square to the phone."}</div>
+    <div class="actions"><button class="btn" id="fCancel">Cancel</button><button class="btn" id="fRetap">Retap</button><button class="btn primary" id="fOk">${isCal ? "Save calibration" : "Use distance"}</button></div>`;
+  $("modal").classList.add("open");
+  $("fCancel").onclick = endFlow; $("fRetap").onclick = () => { T.pts = []; $("modal").classList.remove("open"); };
+  $("fOk").onclick = () => {
+    const unit = $("fu").value; const w = parseFloat($("fw").value) * UNITS[unit]; S.unit = unit;
+    const s = Math.hypot(T.pts[1][0] - T.pts[0][0], T.pts[1][1] - T.pts[0][1]);
+    if (!(w > 0) || s < 10) return toast("Need a width and two separate taps");
+    if (isCal) {
+      const d = parseFloat($("fd").value) * UNITS[unit]; if (!(d > 0)) return toast("Need the distance too");
+      const f = d * s / w; const fl = f / drawScale() / Math.max(S.vw, S.vh);
+      S.calib[S.lensKey] = { fl, when: Date.now() }; persist(); updateCalPill(); toast("Lens calibrated");
+    } else {
+      const d = focalPx() * w / s;
+      if (S.mode === "projector") S.proj.dist = d; else S.disp.dist = d; persist(); buildSheet(); toast(`Distance ${fmtLen(d)}`);
+    }
+    endFlow();
+  };
+}
+function fmtLen(inches) { const u = S.unit; if (u === "ft") { const ft = Math.floor(inches / 12), i = inches - ft * 12; return `${ft} ft ${i.toFixed(0)} in`; } if (u === "m") return `${(inches * 2.54 / 100).toFixed(2)} m`; if (u === "cm") return `${(inches * 2.54).toFixed(0)} cm`; return `${inches.toFixed(0)} in`; }
+
+// ---- settings sheet ----
+function buildSheet() {
+  const sh = $("sheet"); const asp = (id, val) => `<select id="${id}">${ASPECTS.map(([n, v]) => `<option value="${v}" ${Math.abs(v - val) < 0.01 ? "selected" : ""}>${n}</option>`).join("")}</select>`;
+  if (S.mode === "camera") {
+    const C = S.cam;
+    sh.innerHTML = `<div class="row"><label>Camera</label><select id="cSel" class="grow">${CAMERAS.map((c, i) => `<option value="${i}" ${i === C.i ? "selected" : ""}>${c.name}</option>`).join("")}</select></div>
+      <div class="row"><label>Wide HFOV</label><input type="number" id="cH" value="${C.hfov}" step="0.1" inputmode="decimal"><span class="hint">°</span><label>Aspect</label>${asp("cA", C.aspect)}</div>
+      <div class="row"><label>Optical zoom</label><input type="number" id="cZ" value="${C.zoomMax}" step="1" min="1" inputmode="numeric"><span class="hint">× max</span></div>
+      <div class="row"><label>Zoom</label><input type="range" id="cZoom" class="grow" min="1" max="${C.zoomMax}" step="0.05" value="${C.zoom}"><span class="val" id="cZv">${C.zoom.toFixed(1)}×</span></div>
+      <div class="hint">Solid frame is the camera at the zoom shown; dashed is its wide end. ${CAMERAS[C.i].note ? "Listed as " + CAMERAS[C.i].note + ", horizontal derived for 16:9. " : ""}Starter values are from spec sheets; check the current sheet before promising a client.</div>`;
+    $("cSel").onchange = e => { C.i = +e.target.value; const c = CAMERAS[C.i]; if (C.i > 0) { C.hfov = c.hfov; C.aspect = c.aspect; C.zoomMax = c.zoom; } C.zoom = 1; persist(); buildSheet(); };
+    $("cH").oninput = e => { C.hfov = Math.max(5, Math.min(170, +e.target.value || 90)); C.i = 0; persist(); };
+    $("cA").onchange = e => { C.aspect = +e.target.value; persist(); };
+    $("cZ").oninput = e => { C.zoomMax = Math.max(1, +e.target.value || 1); C.zoom = Math.min(C.zoom, C.zoomMax); $("cZoom").max = C.zoomMax; persist(); };
+    $("cZoom").oninput = e => { C.zoom = +e.target.value; $("cZv").textContent = C.zoom.toFixed(1) + "×"; persist(); };
+  } else if (S.mode === "projector") {
+    const P = S.proj;
+    sh.innerHTML = `<div class="row"><label>Lens</label><select id="pSel" class="grow">${PROJECTORS.map((p, i) => `<option value="${i}" ${i === P.i ? "selected" : ""}>${p.name}</option>`).join("")}</select></div>
+      <div class="row"><label>Throw ratio</label><input type="number" id="pT1" value="${P.tr1}" step="0.01" inputmode="decimal"><span class="hint">to</span><input type="number" id="pT2" value="${P.tr2}" step="0.01" inputmode="decimal"><label>Aspect</label>${asp("pA", P.aspect)}</div>
+      <div class="row"><label>Zoom</label><input type="range" id="pTr" class="grow" min="${Math.min(P.tr1, P.tr2)}" max="${Math.max(P.tr1, P.tr2)}" step="0.005" value="${P.tr}"><span class="val" id="pTv">${P.tr.toFixed(2)}:1</span></div>
+      <div class="row"><label>Offset</label><input type="range" id="pOff" class="grow" min="-50" max="100" step="1" value="${P.offset}"><span class="val" id="pOv">${P.offset}%</span></div>
+      <div class="hint">Offset: how far the bottom edge of the image sits above the lens axis, as a percentage of image height. 0 puts the bottom edge on the axis; −50 centres the image on the lens.</div>
+      <div class="row"><label><input type="checkbox" id="pInv" ${P.inverted ? "checked" : ""}> Ceiling mount (inverted)</label></div>
+      <div class="row"><label>Throw dist.</label><input type="number" id="pD" value="${P.dist ? (P.dist / UNITS[S.unit]).toFixed(2) : ""}" step="any" inputmode="decimal" placeholder="optional"><select id="pU">${Object.keys(UNITS).map(k => `<option ${k === S.unit ? "selected" : ""}>${k}</option>`).join("")}</select><button class="btn" id="pMeasure" style="flex:0;padding:8px 12px;min-height:38px">Measure by tapping</button></div>
+      <div class="hint">The frame on the wall is right without a distance; the distance only sizes the label. Solid is the current zoom, dashed is the other end of the lens.</div>`;
+    $("pSel").onchange = e => { P.i = +e.target.value; const p = PROJECTORS[P.i]; if (P.i > 0) { P.tr1 = p.tr1; P.tr2 = p.tr2; P.aspect = p.aspect; } P.tr = P.tr1; persist(); buildSheet(); };
+    const trs = () => { P.tr1 = +$("pT1").value || P.tr1; P.tr2 = +$("pT2").value || P.tr1; P.tr = Math.min(Math.max(P.tr, Math.min(P.tr1, P.tr2)), Math.max(P.tr1, P.tr2)); P.i = 0; persist(); buildSheet(); };
+    $("pT1").onchange = trs; $("pT2").onchange = trs;
+    $("pA").onchange = e => { P.aspect = +e.target.value; persist(); };
+    $("pTr").oninput = e => { P.tr = +e.target.value; $("pTv").textContent = P.tr.toFixed(2) + ":1"; persist(); };
+    $("pOff").oninput = e => { P.offset = +e.target.value; $("pOv").textContent = P.offset + "%"; persist(); };
+    $("pInv").onchange = e => { P.inverted = e.target.checked; persist(); };
+    const dist = () => { S.unit = $("pU").value; const v = parseFloat($("pD").value); P.dist = v > 0 ? v * UNITS[S.unit] : 0; persist(); };
+    $("pD").onchange = dist; $("pU").onchange = () => { dist(); buildSheet(); };
+    $("pMeasure").onclick = () => startFlow("dist");
+  } else {
+    const D = S.disp;
+    sh.innerHTML = `<div class="row"><label>Display</label><select id="dSel" class="grow">${DISPLAYS.map(d => `<option value="${d}" ${d === D.diag && !(D.customW > 0) ? "selected" : ""}>${d} in diagonal</option>`).join("")}<option value="0" ${D.customW > 0 ? "selected" : ""}>Custom size (LED wall)</option></select><label>Aspect</label>${asp("dA", D.aspect)}</div>
+      <div class="row" id="dCustom" style="${D.customW > 0 ? "" : "display:none"}"><label>Width</label><input type="number" id="dW" value="${D.customW ? (D.customW / UNITS[S.unit]).toFixed(2) : ""}" step="any" inputmode="decimal"><label>Height</label><input type="number" id="dH" value="${D.customH ? (D.customH / UNITS[S.unit]).toFixed(2) : ""}" step="any" inputmode="decimal"><span class="hint">${S.unit}</span></div>
+      <div class="row"><label>Viewing dist.</label><input type="number" id="dD" value="${D.dist ? (D.dist / UNITS[S.unit]).toFixed(2) : ""}" step="any" inputmode="decimal" placeholder="seat to wall"><select id="dU">${Object.keys(UNITS).map(k => `<option ${k === S.unit ? "selected" : ""}>${k}</option>`).join("")}</select><button class="btn" id="dMeasure" style="flex:0;padding:8px 12px;min-height:38px">Measure by tapping</button></div>
+      <div class="hint">Stand at the seat, hold the phone at eye height, point at the wall. Drag the frame to where the display would hang.</div>`;
+    $("dSel").onchange = e => { const v = +e.target.value; if (v > 0) { D.diag = v; D.customW = 0; D.customH = 0; } else { D.customW = D.customW || 96; D.customH = D.customH || 54; } persist(); buildSheet(); };
+    $("dA").onchange = e => { D.aspect = +e.target.value; persist(); };
+    const cust = () => { D.customW = (parseFloat($("dW").value) || 0) * UNITS[S.unit]; D.customH = (parseFloat($("dH").value) || 0) * UNITS[S.unit]; persist(); };
+    if ($("dW")) { $("dW").onchange = cust; $("dH").onchange = cust; }
+    const dist = () => { S.unit = $("dU").value; const v = parseFloat($("dD").value); D.dist = v > 0 ? v * UNITS[S.unit] : 0; persist(); };
+    $("dD").onchange = dist; $("dU").onchange = () => { dist(); buildSheet(); };
+    $("dMeasure").onclick = () => startFlow("dist");
+  }
+}
+function infoText() {
+  if (S.mode === "camera") { const C = S.cam; const h = tanToFov(hfovToTan(C.hfov) / C.zoom), v = tanToFov(hfovToTan(C.hfov) / C.zoom / C.aspect); return `${CAMERAS[C.i].name === "Custom" ? "Custom camera" : CAMERAS[C.i].name}  ${h.toFixed(0)}° × ${v.toFixed(0)}°${C.zoom > 1.001 ? "  at " + C.zoom.toFixed(1) + "×" : ""}`; }
+  if (S.mode === "projector") { const P = S.proj; let s = `Projector ${P.tr.toFixed(2)}:1`; if (P.dist > 0) { const W = P.dist / P.tr, H = W / P.aspect, dg = Math.hypot(W, H); s += `  →  ${fmtLen(W)} × ${fmtLen(H)}, ${dg.toFixed(0)} in diagonal at ${fmtLen(P.dist)}`; } else s += "  (set a distance for the image size)"; return s; }
+  const D = S.disp; const size = D.customW > 0 ? `${fmtLen(D.customW)} × ${fmtLen(D.customH)}` : `${D.diag} in`; return `Display ${size}${D.dist > 0 ? " at " + fmtLen(D.dist) : ""}`;
+}
+setInterval(() => { $("pillInfo").innerHTML = infoText(); }, 300);
+
+// ---- controls ----
+document.querySelectorAll("#top .tabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#top .tabs button").forEach(x => x.setAttribute("aria-selected", x === b)); S.mode = b.dataset.mode; S.nudge = I3(); if (S.pinned && S.R) S.pinned = S.R; persist(); buildSheet();
+}));
+document.querySelectorAll("#top .tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.mode === S.mode));
+$("btnSheet").onclick = () => $("sheet").classList.toggle("open");
+$("btnCal").onclick = () => startFlow("calib");
+$("btnPin").onclick = async () => {
+  if (S.pinned) { S.pinned = null; $("btnPin").setAttribute("aria-pressed", "false"); toast("Frame follows the phone again"); return; }
+  if (!S.motion) { const ok = await enableMotion(); await new Promise(r => setTimeout(r, 250)); if (!S.R) return toast(ok ? "No motion data yet, try again" : "Motion access was refused; pin to room needs it"); }
+  S.pinned = matMul(S.R, S.nudge); S.nudge = I3(); $("btnPin").setAttribute("aria-pressed", "true"); toast("Frame pinned to the room. Pan to see its edges; double-tap to re-centre.", 3000);
+};
+$("btnShot").onclick = async () => {
+  if (!S.vw) return toast("Camera not ready yet");
+  const bar = 52 * DPR; const out = document.createElement("canvas"); out.width = CW; out.height = CH + bar; const o = out.getContext("2d");
+  o.drawImage(canvas, 0, 0); o.fillStyle = "#101418"; o.fillRect(0, CH, CW, bar);
+  o.fillStyle = "#e9ecef"; o.font = `${12.5 * DPR}px -apple-system,Roboto,sans-serif`; o.textBaseline = "middle";
+  const pr = S.R ? pitchRoll(S.R) : null; const cal = S.calib[S.lensKey] ? "lens calibrated" : "lens uncalibrated";
+  o.fillText(infoText().replace(/<[^>]+>/g, ""), 10 * DPR, CH + bar * 0.3);
+  o.fillStyle = "#9aa3ad"; o.fillText(`${pr ? "pitch " + pr.pitch.toFixed(0) + "°, roll " + pr.roll.toFixed(0) + "°" : "no motion data"}   |   ${cal}${S.pinned ? ", pinned" : ""}   |   ${new Date().toLocaleString()}`, 10 * DPR, CH + bar * 0.72);
+  const blob = await new Promise(r => out.toBlob(r, "image/jpeg", 0.9));
+  const name = `sightline_${S.mode}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.jpg`;
+  const file = new File([blob], name, { type: "image/jpeg" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: "Sightline" }); return; } catch (e) { if (e.name === "AbortError") return; } }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.target = "_blank"; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); toast("Saved " + name);
+};
+$("btnStart").onclick = async () => {
+  $("btnStart").disabled = true;
+  await enableMotion();  // ask on the same tap; harmless if the browser has no gate
+  try { await startCamera(); } catch (e) { $("btnStart").disabled = false; return toast("Camera failed: " + e.message + ". Sightline needs HTTPS and camera permission.", 5000); }
+  $("gate").style.display = "none"; buildSheet(); updateCalPill(); loop();
+  setInterval(updateCalPill, 2000);
+  try { screen.orientation && screen.orientation.lock && screen.orientation.lock("portrait").catch(() => {}); } catch (e) {}
+};
+</script>
+</body>
+</html>
